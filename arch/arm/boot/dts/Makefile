@@ -800,6 +800,7 @@ dtb-$(CONFIG_ARCH_S5P4418) += \
 	s5p4418-nanopi2-rev02.dtb \
 	s5p4418-nanopi2-rev03.dtb \
 	s5p4418-nanopi2-rev04.dtb \
+	s5p4418-nanopi2-rev05.dtb \
 	s5p4418-nanopi2-rev07.dtb \
 	s5p4418-nanopi2-rev103.dtb
 endif

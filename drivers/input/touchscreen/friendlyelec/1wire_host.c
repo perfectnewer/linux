@@ -48,6 +48,7 @@
 #include <linux/gpio.h>
 #include <linux/pwm.h>
 #include <linux/i2c.h>
+#include <linux/reboot.h>
 #include <linux/of_address.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
@@ -79,6 +80,7 @@ static int bus_type = -1;
 static struct onewire_ts_priv *onewire_priv;
 static struct ts_onewire_platform_data *pdata;
 static struct pwm_device *pwm;
+static struct notifier_block reboot_nb;
 
 #ifdef CONFIG_AUTO_REPORT_1WIRE_INPUT
 static int invert_x, invert_y, swap_xy;
@@ -465,10 +467,7 @@ static inline void clear_tint(void)
 static void samsung_pwm_start(struct pwm_device *pwm)
 {
 	unsigned int tcon_chan = to_tcon_channel(pwm->hwpwm);
-	unsigned long flags;
 	u32 tcon;
-
-	local_irq_save(flags);
 
 	tcon = readl(pdata->pwm_reg_base + REG_TCON);
 
@@ -479,23 +478,16 @@ static void samsung_pwm_start(struct pwm_device *pwm)
 	tcon &= ~TCON_MANUALUPDATE(tcon_chan);
 	tcon |= TCON_START(tcon_chan) | TCON_AUTORELOAD(tcon_chan);
 	writel(tcon, pdata->pwm_reg_base + REG_TCON);
-
-	local_irq_restore(flags);
 }
 
 static void samsung_pwm_stop(struct pwm_device *pwm)
 {
 	unsigned int tcon_chan = to_tcon_channel(pwm->hwpwm);
-	unsigned long flags;
 	u32 tcon;
-
-	local_irq_save(flags);
 
 	tcon = readl(pdata->pwm_reg_base + REG_TCON);
 	tcon &= ~TCON_AUTORELOAD(tcon_chan);
 	writel(tcon, pdata->pwm_reg_base + REG_TCON);
-
-	local_irq_restore(flags);
 }
 #else
 
@@ -506,16 +498,26 @@ static void samsung_pwm_stop(struct pwm_device *pwm)
 static int init_timer_for_1wire(void)
 {
 	int period_ns = NSEC_PER_SEC / SAMPLE_BPS;
+
+#if defined(CONFIG_ARCH_S5P4418)
+	period_ns -= 200;
+#endif
 	return pwm_config(pwm, period_ns >> 1, period_ns);
 }
 
 static inline void stop_timer_for_1wire(void)
 {
+	unsigned long flags;
+
+	local_irq_save(flags);
+
 #if defined(CONFIG_PWM_SAMSUNG)
 	samsung_pwm_stop(pwm);
 #else
 	pwm_disable(pwm);
 #endif
+
+	local_irq_restore(flags);
 }
 
 //---------------------------------------------------------
@@ -539,7 +541,7 @@ static irqreturn_t timer_for_1wire_interrupt(int irq, void *dev_id)
 	clear_tint();
 
 	io_bit_count--;
-	switch(one_wire_status) {
+	switch (one_wire_status) {
 	case START:
 		if (io_bit_count == 0) {
 			io_bit_count = 16;
@@ -759,9 +761,15 @@ static int ts_1wire_probe(struct platform_device *pdev)
 	set_pin_value(1);
 	set_pin_up();
 
+#if defined(CONFIG_ARCH_S5P4418) && defined(CONFIG_MULTICORE_IRQ)
+	ret = devm_request_threaded_irq(&pdev->dev, pdata->pwm_irq,
+			NULL, timer_for_1wire_interrupt,
+			IRQF_SHARED | IRQF_ONESHOT, "onewire_pwm_irq", pdata);
+#else
 	ret = devm_request_irq(&pdev->dev, pdata->pwm_irq,
 			timer_for_1wire_interrupt,
 			IRQF_SHARED, "onewire_pwm_irq", pdata);
+#endif
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request irq %d\n", pdata->pwm_irq);
 		goto free_pwm;
@@ -1030,7 +1038,6 @@ static int onewire_ts_probe(struct i2c_client *client,
 	if (ctp_id != CTP_NONE && ctp_id != CTP_AUTO) {
 		has_ts_data = 0;
 		timer_interval = HZ / 25;
-		goto err_nodev;
 	}
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -1047,7 +1054,6 @@ static int onewire_ts_probe(struct i2c_client *client,
 	}
 
 	priv->client = client;
-	priv->irq = client->irq;
 	priv->sample_delay_ms = 12;
 	mutex_init(&priv->mutex);
 	INIT_WORK(&priv->work, onewire_ts_work_func);
@@ -1058,18 +1064,24 @@ static int onewire_ts_probe(struct i2c_client *client,
 		goto err_wq;
 	}
 
-	ret = request_irq(priv->irq, onewire_ts_isr,
-			IRQ_TYPE_EDGE_FALLING, client->name, priv);
-	if (ret) {
-		dev_err(&client->dev, "failed to request IRQ %d\n", priv->irq);
-		goto err_irq;
+	if (has_ts_data) {
+		/* tell user app (tscal.sh) to do calibrate */
+		total_received = 256;
+
+		priv->irq = client->irq;
+	}
+
+	if (priv->irq > 0) {
+		ret = request_irq(priv->irq, onewire_ts_isr,
+				IRQ_TYPE_EDGE_FALLING, client->name, priv);
+		if (ret) {
+			dev_err(&client->dev, "failed to request IRQ %d\n", priv->irq);
+			goto err_irq;
+		}
 	}
 
 	onewire_priv = priv;
 	dev_set_drvdata(&client->dev, priv);
-
-	/* tell user app (tscal.sh) to do calibrate */
-	total_received = 256;
 
 	bus_type = BUS_I2C;
 	dev_info(&client->dev, "found panel %d, rev %04d\n", lcd_type, firmware_ver);
@@ -1133,6 +1145,19 @@ static struct i2c_driver onewire_ts_driver = {
 
 //---------------------------------------------------------
 
+static int onewire_reboot_handler(struct notifier_block *this,
+		unsigned long mode, void *cmd)
+{
+	backlight_req = 0x80U;
+	if (bus_type == BUS_I2C)
+		queue_work(onewire_priv->queue, &onewire_priv->work);
+
+	wait_event_interruptible_timeout(bl_waitq, bl_ready, HZ / 10);
+	pr_info("onewire: backlight off\n");
+
+	return NOTIFY_DONE;
+}
+
 static int __init onewire_dev_init(void)
 {
 	int ret;
@@ -1155,6 +1180,13 @@ static int __init onewire_dev_init(void)
 	if (ret)
 		goto fail_drv;
 
+	reboot_nb.notifier_call = onewire_reboot_handler;
+	reboot_nb.priority = 192;
+	if (register_reboot_notifier(&reboot_nb)) {
+		printk("onewire: failed to register reboot notifier\n");
+		reboot_nb.notifier_call = NULL;
+	}
+
 	return 0;
 
 fail_drv:
@@ -1167,6 +1199,9 @@ fail_ts:
 
 static void __exit onewire_dev_exit(void)
 {
+	if (reboot_nb.notifier_call)
+		unregister_reboot_notifier(&reboot_nb);
+
 	i2c_del_driver(&onewire_ts_driver);
 
 	remove_proc_entry("driver/one-wire-info", NULL);

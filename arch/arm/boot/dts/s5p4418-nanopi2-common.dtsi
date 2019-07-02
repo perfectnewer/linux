@@ -74,7 +74,10 @@
 			/* uart5:uart@c0084000 { clock-frequency = <147500000>; }; */
 
 			vip0:vip@c00c1000  { src-force = <4>; };
-
+			/*
+			vip0:vip@c00c1000 { clock-frequency = <300000000>;};
+			*/
+			
 			i2c0:i2c@c00ae000  { clock-frequency = <200000000>; };
 			i2c1:i2c@c00af000  { clock-frequency = <200000000>; };
 			i2c2:i2c@c00b0000  { clock-frequency = <200000000>; };
@@ -358,7 +361,7 @@
 					VCC1P0_CORE_PMIC:
 						axp22_dcdc3 { PMIC_PDATA_INIT(14,
 							"axp228_1p0_core",
-							600000, 1860000, 1, 1, 1200000,
+							600000, 1860000, 1, 1, 1100000,
 							1, 0xF) };
 					VCC_DCDC4:
 						axp22_dcdc4 { PMIC_PDATA_INIT(15,
@@ -485,6 +488,13 @@
 				interrupts = <16 IRQ_TYPE_EDGE_FALLING>;
 			};
 
+			st1572_ts@55 {
+				compatible = "sitronix,st1572";
+				reg = <0x55>;
+				interrupt-parent = <&gpio_c>;
+				interrupts = <16 IRQ_TYPE_EDGE_FALLING>;
+			};
+
 		};
 
 		i2s_0: i2s@c0055000 {
@@ -522,7 +532,7 @@
 
 			bt_cfg_en: bt_cfg_en {
 				nexell,pins = "gpiob-8";
-				nexell,pin-function = <1>;
+				nexell,pin-function = <0>;
 				nexell,pin-pull = <2>;
 				nexell,pin-strength = <0>;
 			};
@@ -538,6 +548,13 @@
 				nexell,pins = "gpioc-17";
 				nexell,pin-function = <2>;
 				nexell,pin-pull = <0>;
+				nexell,pin-strength = <0>;
+			};
+
+			led1_gpio: leds-gpio {
+				nexell,pins ="gpiob-12";
+				nexell,pin-function = <2>;
+				nexell,pin-pull = <2>;
 				nexell,pin-strength = <0>;
 			};
 		};
@@ -598,6 +615,19 @@
 			gpios = <&alive_0 0 0>;
 			linux,code = <KEY_POWER>;
 			gpio-key,wakeup;
+		};
+	};
+
+	leds: gpio-leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 =<&led1_gpio>;
+
+		led@1 {
+			gpios = <&gpio_b 12 GPIO_ACTIVE_LOW>;
+			label = "status_led";
+			linux,default-trigger = "heartbeat";
+			linux,default-trigger-delay-ms = <0>;
 		};
 	};
 
@@ -761,7 +791,27 @@
 };
 
 &vip_0 {
+	clk-base = <0xc00c1000>;
 	status = "okay";
+};
+
+&clipper_0 {
+	interface_type = <NX_CAPTURE_INTERFACE_PARALLEL>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&vid0_data_clk &vid0_sync>;
+	clock_source = <4>;
+	data_order = <NX_VIN_Y0CBY1CR>;
+	port = <0>;
+	external_sync = <0>;
+	interlace = <0>;
+	status = "okay";
+
+	sensor {
+		type = <NX_CAPTURE_SENSOR_I2C>;
+		i2c_name = "ov5640";
+		i2c_adapter = <0>;
+		addr = <0x3C>;
+	};
 };
 
 &dp_drm {

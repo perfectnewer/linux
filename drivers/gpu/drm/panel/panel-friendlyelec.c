@@ -35,6 +35,32 @@
 /* -------------------------------------------------------------- */
 #include "panel-friendlyelec.h"
 
+static struct lcd_desc hd900 = {
+	.width = 1280,
+	.height = 800,
+	.p_width = 151,
+	.p_height = 94,
+	.bpp = 24,
+	.freq = 60,
+
+	.timing = {
+		.h_fp = 33,
+		.h_bp = 33,
+		.h_sw = 33,
+		.v_fp =  4,
+		.v_fpe = 1,
+		.v_bp =  4,
+		.v_bpe = 1,
+		.v_sw =  4,
+	},
+	.polarity = {
+		.rise_vclk = 0,
+		.inv_hsync = 0,
+		.inv_vsync = 1,
+		.inv_vden = 0,
+	},
+};
+
 static struct lcd_desc hd700 = {
 	.width = 800,
 	.height = 1280,
@@ -139,7 +165,6 @@ static struct lcd_desc s70d = {
 	},
 };
 
-#ifndef CONFIG_ANDROID
 static struct lcd_desc h43 = {
 	.width = 480,
 	.height = 272,
@@ -217,7 +242,6 @@ static struct lcd_desc w35 = {
 		.inv_vden = 0,
 	},
 };
-#endif
 
 static struct lcd_desc w50 = {
 	.width= 800,
@@ -225,7 +249,7 @@ static struct lcd_desc w50 = {
 	.p_width = 108,
 	.p_height = 64,
 	.bpp = 24,
-	.freq = 70,
+	.freq = 61,
 
 	.timing = {
 		.h_fp = 40,
@@ -505,16 +529,18 @@ static struct {
 	{ "HD700",	&hd700,	1 },
 	{ "HD702",	&hd700,	CTP_GOODIX  },
 	{ "H70",	&hd700,	0 },
+	{ "HD900",	&hd900,	CTP_ST1572 },
 	{ "S70",	&s70,	1 },
+	{ "S701",	&s70,	CTP_GOODIX  },
 	{ "S702",	&s702,	1 },
 	{ "S70D",	&s70d,	0 },
 	{ "S430",	&s430,	CTP_HIMAX   },
+	{ "K101",	&hd101,	CTP_FT5X06  },
+	{ "U101A",	&hd101,	CTP_GOODIX  },
 
-#ifndef CONFIG_ANDROID
 	{ "H43",	&h43,	0 },
 	{ "P43",	&p43,	0 },
 	{ "W35",	&w35,	0 },
-#endif
 
 	/* TODO: Testing */
 	{ "W50",	&w50,	0 },
@@ -842,7 +868,7 @@ static int panel_display_mode_init(struct panel_desc *ctx)
 	dmode->vdisplay = lcd->height;
 	dmode->vsync_start = dmode->vdisplay + lcd->timing.v_fp;
 	dmode->vsync_end = dmode->vsync_start + lcd->timing.v_sw;
-	dmode->vtotal = dmode->vsync_end + lcd->timing.v_sw;
+	dmode->vtotal = dmode->vsync_end + lcd->timing.v_bp;
 
 	dmode->vrefresh = lcd->freq;
 	dmode->clock = dmode->htotal * dmode->vtotal * dmode->vrefresh / 1000;

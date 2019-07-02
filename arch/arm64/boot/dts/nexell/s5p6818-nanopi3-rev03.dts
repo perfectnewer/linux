@@ -1,5 +1,5 @@
 /*
- * (C) Copyright 2017 FriendlyElec Computer Tech. Co., Ltd.
+ * (C) Copyright 2018 FriendlyElec Computer Tech. Co., Ltd.
  * (http://www.friendlyarm.com)
  *
  * This program is free software; you can redistribute it and/or
@@ -20,43 +20,25 @@
 #include "s5p6818-nanopi3-common.dtsi"
 
 / {
-	model = "FriendlyElec NanoPi Fire3";
-	compatible = "friendlyelec,nanopi-fire3", "nexell,s5p6818";
-
-	snd_null: snd_null@10 {
-		#sound-dai-cells = <0>;
-		compatible = "nexell,snd-null";
-
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0 0>;
-	};
-
-	/delete-node/ wlan;
-	/delete-node/ bt_bcm;
+	model = "FriendlyElec Smart6818";
+	compatible = "friendlyelec,smart6818", "nexell,s5p6818";
 };
 
 &mach {
-	hwrev = <5>;
-	model = "NanoPi Fire3";
-	sdidx = <0>;
+	hwrev = <3>;
+	model = "Smart6818";
 };
 
 &dw_mmc_1 {
-	status = "disabled";
-};
-
-&dw_mmc_2 {
-	status = "disabled";
+	status = "okay";
 };
 
 &simple_card {
-	/delete-property/ simple-audio-card,widgets;
-	/delete-property/ simple-audio-card,routing;
-
 	simple-audio-card,dai-link@0 {
-		codec {
-			sound-dai = <&snd_null>;
-		};
+		hp-det-gpio = <&gpio_b 27 0>;
 	};
+};
+
+&spi_0 {
+	/delete-node/ fbtft@0;
 };

@@ -65,6 +65,9 @@
 			/* uart5:uart@c0084000 { clock-frequency = <147500000>; }; */
 
 			vip0:vip@c00c1000  { src-force = <4>; };
+			/*
+			vip0:vip@c00c1000 { clock-frequency = <300000000>;};
+			*/
 
 			i2c0:i2c@c00ae000  { clock-frequency = <200000000>; };
 			i2c1:i2c@c00af000  { clock-frequency = <200000000>; };
@@ -101,7 +104,7 @@
 		};
 
 		serial1:serial@c00a0000 {
-			pinctrl-0 = <&serial1_pin>, <&serial1_flow>;
+			pinctrl-0 = <&serial1_pin>;
 			status ="okay";
 		};
 
@@ -516,6 +519,13 @@
 				interrupts = <16 IRQ_TYPE_EDGE_FALLING>;
 			};
 
+			st1572_ts@55 {
+				compatible = "sitronix,st1572";
+				reg = <0x55>;
+				interrupt-parent = <&gpio_c>;
+				interrupts = <16 IRQ_TYPE_EDGE_FALLING>;
+			};
+
 		};
 
 		i2s_0: i2s@c0055000 {
@@ -551,9 +561,16 @@
 				nexell,pin-strength = <0>;
 			};
 
+			bt_flow_gpio: bt_flow_gpio {
+				nexell,pins = "gpioc-5", "gpioc-6";
+				nexell,pin-function = <1>;
+				nexell,pin-pull = <2>;
+				nexell,pin-strength = <0>;
+			};
+
 			bt_cfg_en: bt_cfg_en {
 				nexell,pins = "gpiob-8";
-				nexell,pin-function = <1>;
+				nexell,pin-function = <0>;
 				nexell,pin-pull = <2>;
 				nexell,pin-strength = <0>;
 			};
@@ -569,6 +586,13 @@
 				nexell,pins = "gpioc-17";
 				nexell,pin-function = <2>;
 				nexell,pin-pull = <0>;
+				nexell,pin-strength = <0>;
+			};
+
+			led1_gpio: leds-gpio {
+				nexell,pins ="gpiob-12";
+				nexell,pin-function = <2>;
+				nexell,pin-pull = <2>;
 				nexell,pin-strength = <0>;
 			};
 		};
@@ -628,6 +652,19 @@
 		};
 	};
 
+	leds: gpio-leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 =<&led1_gpio>;
+
+		led@1 {
+			gpios = <&gpio_b 12 GPIO_ACTIVE_LOW>;
+			label = "status_led";
+			linux,default-trigger = "heartbeat";
+			linux,default-trigger-delay-ms = <0>;
+		};
+	};
+
 	spdif_out: spdif-out {
 		#sound-dai-cells = <0>;
 		compatible = "linux,spdif-dit";
@@ -670,6 +707,17 @@
 		compatible = "samsung,brcm-wlan";
 		gpios = <&gpio_b 24 0  /* WLAN_EN */
 			 &gpio_c 17 0>; /* WLAN_HOST_WAKE */
+		status = "okay";
+	};
+
+	bt_bcm {
+		compatible = "broadcom,bcm4343";
+		reset-gpios = <&gpio_b 8 0>;
+		rts-gpios = <&gpio_c 6 0>;
+		cts-gpios = <&gpio_c 5 0>;
+		pinctrl-names = "default", "gpios";
+		pinctrl-0 = <&bt_cfg_en>, <&serial1_flow>;
+		pinctrl-1 = <&bt_cfg_en>, <&bt_flow_gpio>;
 		status = "okay";
 	};
 
@@ -721,37 +769,28 @@
 };
 
 &vip_0 {
+	clk-base = <0xc00c1000>;
 	status = "okay";
 };
 
-/*
 &clipper_0 {
 	interface_type = <NX_CAPTURE_INTERFACE_PARALLEL>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&vid0_data_clk &vid0_sync>;
-	gpios = <&gpio_c 9 0 &gpio_e 16 0 &gpio_e 12 0>;
-	data_order = <NX_VIN_CBY0CRY1>;
+	clock_source = <4>;
+	data_order = <NX_VIN_Y0CBY1CR>;
 	port = <0>;
 	external_sync = <0>;
-	interlace = <1>;
+	interlace = <0>;
 	status = "okay";
 
 	sensor {
 		type = <NX_CAPTURE_SENSOR_I2C>;
-		i2c_name = "tw9900";
-		i2c_adapter = <5>;
-		addr = <0x44>;
-	};
-
-	power {
-		enable_seq = <
-		NX_ACTION_START NX_ACTION_TYPE_GPIO 2 0 1 0 10 NX_ACTION_END
-		NX_ACTION_START NX_ACTION_TYPE_GPIO 1 0 1 0 10 NX_ACTION_END
-		NX_ACTION_START NX_ACTION_TYPE_GPIO 0 1 10 NX_ACTION_END
-		>;
+		i2c_name = "ov5640";
+		i2c_adapter = <0>;
+		addr = <0x3C>;
 	};
 };
-*/
 
 &dp_drm {
 	status = "okay";
@@ -838,3 +877,9 @@
 		};
 	};
 };
+
+/*
+&decimator_0 {
+	status = "okay";
+};
+*/
